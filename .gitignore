@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+*.xcuserstate
+xcuserdata/
+
+# Xcode
+build/
+DerivedData/
+*.xcworkspace
+
+# Node
+node_modules/
+.wrangler/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Environment
+.env
+.dev.vars
