@@ -6,9 +6,9 @@ compatibility_date = "2024-12-30"
 binding = "AI"
 
 [[d1_databases]]
-binding = "DB"
+binding = "footprint_db"
 database_name = "footprint-db"
-database_id = "placeholder-replace-after-creation"
+database_id = "79738138-2a85-493d-aac6-a4ceef24adcb"
 
 [triggers]
 crons = ["0 * * * *"]
