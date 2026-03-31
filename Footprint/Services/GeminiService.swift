@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 
 class GeminiService {
-    private let apiKey = "AIzaSyCKtaO7qYuiI7sEsBZKo59e8etzrQ8aS9U"
+    private let apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ?? ""
     private let model = "gemini-2.5-flash"
     private let maxCallsPerDay = 720
     private let minInterval: TimeInterval = 60

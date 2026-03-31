@@ -19,3 +19,4 @@ node_modules/
 # Environment
 .env
 .dev.vars
+Secrets.xcconfig
