@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BB11111111111111BBBBBBBB /* GeminiService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB22222222222222BBBBBBBB /* GeminiService.swift */; };
 		0B46B5C3CF25676E23DD3071 /* ScreenshotService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE96415216175A0F32CF9224 /* ScreenshotService.swift */; };
 		1479BDE48E62F0A3C203064D /* TimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 578129DECA78BA3ECB1E3605 /* TimelineView.swift */; };
 		27E893450B50970619DB89AA /* SummaryEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4779E998181FC1BBCE99F53C /* SummaryEngine.swift */; };
@@ -20,7 +21,8 @@
 		99F94CF157C58D32FF5A67D5 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 2C9219882F789108E08C24B6 /* GRDB */; };
 		B09C52C91DFF0103FFB8CAE6 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79EA9786F5E59E7DCA250462 /* SettingsView.swift */; };
 		B212972F58807C7D540663E5 /* DailyBreakdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0906BF3CF7C496663747CBA /* DailyBreakdownView.swift */; };
-		C24B49F5F1069BBCF692F9A6 /* OpenAIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D1AE026A8F04107E87493AB /* OpenAIService.swift */; };
+		AA11111111111111AAAAAAAA /* CloudflareService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA22222222222222AAAAAAAA /* CloudflareService.swift */; };
+		AA33333333333333AAAAAAAA /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA44444444444444AAAAAAAA /* ChatView.swift */; };
 		D65688B6D43C4AD04111AE77 /* CategoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C095F3865CD12F6E13826466 /* CategoryView.swift */; };
 		D8558E13DBB928BB6037E9F9 /* OCRService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FC03BBD8ACE0ECEF8E8DA25 /* OCRService.swift */; };
 		E186CD7B7C8ADBA2D7B79364 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7BB04D74CC90EA416220D702 /* Assets.xcassets */; };
@@ -42,7 +44,9 @@
 		7B685393AE7645314C34CBC0 /* Footprint.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Footprint.entitlements; sourceTree = "<group>"; };
 		7BB04D74CC90EA416220D702 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7D047C8302CC055C227ABAB2 /* Footprint.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Footprint.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		8D1AE026A8F04107E87493AB /* OpenAIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIService.swift; sourceTree = "<group>"; };
+		AA22222222222222AAAAAAAA /* CloudflareService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudflareService.swift; sourceTree = "<group>"; };
+		BB22222222222222BBBBBBBB /* GeminiService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiService.swift; sourceTree = "<group>"; };
+		AA44444444444444AAAAAAAA /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		AE96415216175A0F32CF9224 /* ScreenshotService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotService.swift; sourceTree = "<group>"; };
 		C0906BF3CF7C496663747CBA /* DailyBreakdownView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyBreakdownView.swift; sourceTree = "<group>"; };
 		C095F3865CD12F6E13826466 /* CategoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryView.swift; sourceTree = "<group>"; };
@@ -69,8 +73,9 @@
 			children = (
 				E32FA72A8AB843DF5011D8E6 /* DatabaseManager.swift */,
 				0FC03BBD8ACE0ECEF8E8DA25 /* OCRService.swift */,
-				8D1AE026A8F04107E87493AB /* OpenAIService.swift */,
+				AA22222222222222AAAAAAAA /* CloudflareService.swift */,
 				AE96415216175A0F32CF9224 /* ScreenshotService.swift */,
+				BB22222222222222BBBBBBBB /* GeminiService.swift */,
 				4779E998181FC1BBCE99F53C /* SummaryEngine.swift */,
 				326E65E4634E9C8FA140D96A /* WindowTracker.swift */,
 			);
@@ -116,6 +121,7 @@
 			isa = PBXGroup;
 			children = (
 				C095F3865CD12F6E13826466 /* CategoryView.swift */,
+				AA44444444444444AAAAAAAA /* ChatView.swift */,
 				C0906BF3CF7C496663747CBA /* DailyBreakdownView.swift */,
 				7894BB52E5FF7C0A30C4E69A /* MenuBarView.swift */,
 				79EA9786F5E59E7DCA250462 /* SettingsView.swift */,
@@ -220,13 +226,15 @@
 				529E1BD17192B2069EB6583C /* HourlySummary.swift in Sources */,
 				F4477503076C9EB2397CBCCA /* MenuBarView.swift in Sources */,
 				D8558E13DBB928BB6037E9F9 /* OCRService.swift in Sources */,
-				C24B49F5F1069BBCF692F9A6 /* OpenAIService.swift in Sources */,
+				AA11111111111111AAAAAAAA /* CloudflareService.swift in Sources */,
+				AA33333333333333AAAAAAAA /* ChatView.swift in Sources */,
 				E1A10E4B82FC0F7A230DE6B6 /* Permissions.swift in Sources */,
 				90D4662AE60B110C0D2B63B0 /* Screenshot.swift in Sources */,
 				0B46B5C3CF25676E23DD3071 /* ScreenshotService.swift in Sources */,
 				B09C52C91DFF0103FFB8CAE6 /* SettingsView.swift in Sources */,
 				27E893450B50970619DB89AA /* SummaryEngine.swift in Sources */,
 				1479BDE48E62F0A3C203064D /* TimelineView.swift in Sources */,
+				BB11111111111111BBBBBBBB /* VisionService.swift in Sources */,
 				65F21D2AB1F9480833CB0568 /* WindowTracker.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

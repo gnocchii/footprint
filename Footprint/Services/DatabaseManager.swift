@@ -13,6 +13,11 @@ class DatabaseManager {
         dbPool = try! DatabasePool(path: dbPath)
 
         try! migrator.migrate(dbPool)
+
+        // Clean up loginwindow records
+        try? dbPool.write { db in
+            try db.execute(sql: "DELETE FROM activity_records WHERE bundleIdentifier = 'com.apple.loginwindow'")
+        }
     }
 
     private var migrator: DatabaseMigrator {
@@ -73,16 +78,21 @@ class DatabaseManager {
         }
     }
 
-    func dailyAppUsage(for date: Date) throws -> [ActivityRecord.AppUsage] {
-        try dbPool.read { db in
-            try ActivityRecord.dailyAppUsage(db: db, date: date)
+    /// Get a short summary of recent activity for Gemini context
+    func recentActivitySummary(minutes: Int) throws -> String {
+        let cutoff = Date().addingTimeInterval(-Double(minutes * 60))
+        let records = try dbPool.read { db in
+            try ActivityRecord
+                .filter(Column("timestamp") >= cutoff)
+                .filter(Column("duration") != nil)
+                .order(Column("timestamp").desc)
+                .limit(10)
+                .fetchAll(db)
         }
-    }
-
-    func dailyCategoryUsage(for date: Date) throws -> [ActivityRecord.CategoryUsage] {
-        try dbPool.read { db in
-            try ActivityRecord.dailyCategoryUsage(db: db, date: date)
-        }
+        return records.map { r in
+            let dur = Int((r.duration ?? 0) / 60)
+            return "\(r.appName): \(r.windowTitle) (\(dur)m)"
+        }.joined(separator: "\n")
     }
 
     func updateCategories(for ids: [Int64], category: String) throws {
@@ -90,6 +100,18 @@ class DatabaseManager {
             try db.execute(
                 sql: "UPDATE activity_records SET category = ? WHERE id IN (\(ids.map { "\($0)" }.joined(separator: ",")))",
                 arguments: [category]
+            )
+        }
+    }
+
+    func updateCategoryByAppName(appName: String, date: Date, category: String) throws {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+        try dbPool.write { db in
+            try db.execute(
+                sql: "UPDATE activity_records SET category = ? WHERE appName = ? AND timestamp >= ? AND timestamp < ?",
+                arguments: [category, appName, startOfDay, endOfDay]
             )
         }
     }
@@ -108,6 +130,50 @@ class DatabaseManager {
                 sql: "UPDATE screenshots SET ocrText = ? WHERE id = ?",
                 arguments: [ocrText, id]
             )
+        }
+    }
+
+    /// Get 10-min summaries for a given day
+    func activitySummaries(for date: Date) throws -> [(timestamp: Date, summary: String)] {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+
+        let rows = try dbPool.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT timestamp, ocrText FROM screenshots
+                WHERE timestamp >= ? AND timestamp < ?
+                  AND ocrText LIKE '[SUMMARY]%'
+                ORDER BY timestamp
+                """, arguments: [startOfDay, endOfDay])
+        }
+        return rows.compactMap { row in
+            guard let ts = row["timestamp"] as? Date,
+                  let text = row["ocrText"] as? String else { return nil }
+            let summary = String(text.dropFirst("[SUMMARY] ".count))
+            return (timestamp: ts, summary: summary)
+        }
+    }
+
+    /// Get all Gemini descriptions for a given day
+    func geminiDescriptions(for date: Date) throws -> [(timestamp: Date, description: String)] {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+
+        let rows = try dbPool.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT timestamp, ocrText FROM screenshots
+                WHERE timestamp >= ? AND timestamp < ?
+                  AND ocrText LIKE '[GEMINI]%'
+                ORDER BY timestamp
+                """, arguments: [startOfDay, endOfDay])
+        }
+        return rows.compactMap { row in
+            guard let ts = row["timestamp"] as? Date,
+                  let text = row["ocrText"] as? String else { return nil }
+            let desc = String(text.dropFirst("[GEMINI] ".count))
+            return (timestamp: ts, description: desc)
         }
     }
 
@@ -160,25 +226,6 @@ class DatabaseManager {
         }
     }
 
-    // MARK: - Observation (for live UI updates)
-
-    func observeDailyAppUsage(date: Date, onChange: @escaping ([ActivityRecord.AppUsage]) -> Void) -> AnyDatabaseCancellable {
-        let observation = ValueObservation.tracking { db in
-            try ActivityRecord.dailyAppUsage(db: db, date: date)
-        }
-        return observation.start(in: dbPool, onError: { _ in }, onChange: onChange)
-    }
-
-    func observeDailySummaries(date: Date, onChange: @escaping ([HourlySummary]) -> Void) -> AnyDatabaseCancellable {
-        let dateString = Self.dateFormatter.string(from: date)
-        let observation = ValueObservation.tracking { db in
-            try HourlySummary
-                .filter(Column("date") == dateString)
-                .order(Column("hour"))
-                .fetchAll(db)
-        }
-        return observation.start(in: dbPool, onError: { _ in }, onChange: onChange)
-    }
 
     static let dateFormatter: DateFormatter = {
         let f = DateFormatter()

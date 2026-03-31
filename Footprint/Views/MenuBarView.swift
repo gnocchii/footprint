@@ -2,41 +2,117 @@ import SwiftUI
 
 struct MenuBarView: View {
     @EnvironmentObject var appState: AppState
-    @State private var selectedTab: Tab = .timeline
+    @State private var selectedTab: Tab = .apps
+    @State private var selectedDate = Date()
 
     enum Tab: String, CaseIterable {
-        case timeline = "Timeline"
         case apps = "Apps"
         case categories = "Categories"
+        case timeline = "Timeline"
         case chat = "Chat"
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header — Screen Time style
-            HStack {
-                Image(systemName: "shoeprints.fill")
+            // Header
+            HStack(spacing: 8) {
+                Image(systemName: "pawprint.fill")
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.blue)
                 Text("Footprint")
-                    .font(.headline)
+                    .font(.system(size: 14, weight: .semibold))
+
                 Spacer()
 
-                Button(action: { appState.toggleTracking() }) {
-                    Image(systemName: appState.isTracking ? "pause.circle.fill" : "play.circle.fill")
-                        .foregroundStyle(appState.isTracking ? .green : .secondary)
+                Button(action: {
+                    Task { await appState.refreshNow() }
+                }) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 12))
                 }
                 .buttonStyle(.plain)
-                .help(appState.isTracking ? "Pause tracking" : "Resume tracking")
+                .help("Refresh analysis")
 
-                SettingsLink {
-                    Image(systemName: "gearshape")
+                Button(action: { appState.toggleTracking() }) {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(appState.isTracking ? .green : .orange)
+                            .frame(width: 7, height: 7)
+                        Text(appState.isTracking ? "Tracking" : "Paused")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.quaternary)
+                    .cornerRadius(10)
                 }
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.vertical, 10)
 
-            Divider()
+            // Error banners
+            if !appState.issues.isEmpty {
+                VStack(spacing: 4) {
+                    ForEach(appState.issues, id: \.self) { issue in
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.orange)
+                            Text(issue)
+                                .font(.system(size: 10))
+                                .foregroundStyle(.orange)
+                            Spacer()
+                            if issue.contains("Accessibility") {
+                                Button("Fix") { Permissions.openAccessibilitySettings() }
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(.blue)
+                                    .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.orange.opacity(0.1))
+                        .cornerRadius(6)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 4)
+            }
+
+            // Global date picker with arrows
+            HStack(spacing: 12) {
+                Button(action: { changeDate(by: -1) }) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+
+                DatePicker("", selection: $selectedDate, displayedComponents: .date)
+                    .datePickerStyle(.compact)
+                    .labelsHidden()
+
+                Button(action: { changeDate(by: 1) }) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .disabled(Calendar.current.isDateInToday(selectedDate))
+
+                Spacer()
+
+                if !Calendar.current.isDateInToday(selectedDate) {
+                    Button("Today") {
+                        selectedDate = Date()
+                    }
+                    .font(.system(size: 11))
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.blue)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
 
             // Tab picker
             Picker("View", selection: $selectedTab) {
@@ -46,17 +122,17 @@ struct MenuBarView: View {
             }
             .pickerStyle(.segmented)
             .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.bottom, 8)
 
-            // Content
+            // Content — pass selectedDate to all tabs
             Group {
                 switch selectedTab {
-                case .timeline:
-                    TimelineView()
                 case .apps:
-                    DailyBreakdownView()
+                    DailyBreakdownView(selectedDate: $selectedDate)
                 case .categories:
-                    CategoryView()
+                    CategoryView(selectedDate: $selectedDate)
+                case .timeline:
+                    TimelineView(selectedDate: $selectedDate)
                 case .chat:
                     ChatView()
                 }
@@ -65,25 +141,24 @@ struct MenuBarView: View {
 
             Divider()
 
-            // Footer
             HStack {
-                Circle()
-                    .fill(appState.isTracking ? .green : .secondary)
-                    .frame(width: 6, height: 6)
-                Text(appState.isTracking ? "Tracking" : "Paused")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button("Quit") {
+                Button("Quit Footprint") {
                     NSApplication.shared.terminate(nil)
                 }
                 .buttonStyle(.plain)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                Spacer()
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.vertical, 6)
         }
         .frame(width: 400, height: 520)
+    }
+
+    private func changeDate(by days: Int) {
+        if let newDate = Calendar.current.date(byAdding: .day, value: days, to: selectedDate) {
+            selectedDate = newDate
+        }
     }
 }

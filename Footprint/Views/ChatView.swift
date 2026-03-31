@@ -99,7 +99,7 @@ struct ChatView: View {
             Button(action: { sendMessage(inputText) }) {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(inputText.isEmpty ? .secondary : .blue)
+                    .foregroundColor(inputText.isEmpty ? .secondary : .blue)
             }
             .buttonStyle(.plain)
             .disabled(inputText.isEmpty || isLoading)
@@ -117,20 +117,61 @@ struct ChatView: View {
         inputText = ""
         isLoading = true
 
+        // Grab data on main thread, then do async work
+        let records = (try? appState.databaseManager.dbPool.read { dbConn in
+            try ActivityRecord.recordsForDay(db: dbConn, date: Date())
+        }) ?? []
+        let geminiDescs = (try? appState.databaseManager.geminiDescriptions(for: Date())) ?? []
+        let summaries = (try? appState.databaseManager.activitySummaries(for: Date())) ?? []
+        let gemini = appState.screenshotService.geminiService
+
         Task {
-            do {
-                let response = try await appState.cloudflareService.sendChatMessage(trimmed)
-                let aiMessage = ChatMessage(role: "assistant", content: response.response, timestamp: Date())
-                await MainActor.run {
-                    messages.append(aiMessage)
-                    isLoading = false
+
+            // Build context string
+            var context = ""
+
+            if !summaries.isEmpty {
+                context += "Activity summaries:\n"
+                for s in summaries {
+                    let fmt = DateFormatter()
+                    fmt.dateFormat = "h:mm a"
+                    context += "- \(fmt.string(from: s.timestamp)): \(s.summary)\n"
                 }
-            } catch {
-                let errorMessage = ChatMessage(role: "assistant", content: "Sorry, I couldn't process that: \(error.localizedDescription)", timestamp: Date())
-                await MainActor.run {
-                    messages.append(errorMessage)
-                    isLoading = false
+                context += "\n"
+            }
+
+            if !geminiDescs.isEmpty {
+                context += "Screen observations:\n"
+                for g in geminiDescs.suffix(15) {
+                    let fmt = DateFormatter()
+                    fmt.dateFormat = "h:mm a"
+                    context += "- \(fmt.string(from: g.timestamp)): \(g.description)\n"
                 }
+                context += "\n"
+            }
+
+            // App usage summary
+            let usage = ActivityRecord.buildAppUsage(from: records)
+            if !usage.isEmpty {
+                context += "App usage today:\n"
+                for u in usage.prefix(10) {
+                    let mins = Int(u.totalDuration / 60)
+                    context += "- \(u.name): \(mins)m (\(u.category.rawValue))\n"
+                }
+            }
+
+            let history = messages.map { (role: $0.role, content: $0.content) }
+
+            let response = await gemini.chat(
+                question: trimmed,
+                activityContext: context,
+                chatHistory: history
+            )
+
+            await MainActor.run {
+                let content = response ?? "Sorry, couldn't get a response right now."
+                messages.append(ChatMessage(role: "assistant", content: content, timestamp: Date()))
+                isLoading = false
             }
         }
     }

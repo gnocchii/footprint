@@ -2,11 +2,11 @@ import Foundation
 
 class CloudflareService {
     var baseURL: String {
-        UserDefaults.standard.string(forKey: "cloudflare_base_url") ?? ""
+        CloudflareConstants.baseURL
     }
 
     var apiKey: String {
-        UserDefaults.standard.string(forKey: "cloudflare_api_key") ?? ""
+        CloudflareConstants.apiKey
     }
 
     var isConfigured: Bool {
@@ -112,13 +112,64 @@ class CloudflareService {
         return try await post(path: "/api/chat", body: body)
     }
 
+    // MARK: - Hourly Activities (pre-computed)
+
+    struct HourlyActivitiesResponse: Decodable {
+        var date: String
+        var hours: [HourBlock]
+    }
+
+    struct HourBlock: Decodable, Identifiable {
+        var id: Int { hour }
+        var hour: Int
+        var summary: String
+        var activities: [AnalyzedActivity]
+    }
+
+    struct AnalyzedActivity: Decodable, Identifiable {
+        var id: String { "\(label)-\(category)-\(minutes)" }
+        var label: String
+        var category: String
+        var subcategory: String
+        var minutes: Int
+    }
+
+    func fetchHourlyActivities(date: String) async throws -> HourlyActivitiesResponse {
+        guard isConfigured else { throw CloudflareError.notConfigured }
+        return try await get(path: "/api/hourly-activities?date=\(date)")
+    }
+
+    // MARK: - User Labels
+
+    struct LabelsResponse: Decodable {
+        var labels: [UserLabel]
+    }
+
+    struct UserLabel: Decodable, Identifiable {
+        var id: Int
+        var pattern: String
+        var category: String
+        var subcategory: String
+    }
+
+    func fetchLabels() async throws -> LabelsResponse {
+        guard isConfigured else { throw CloudflareError.notConfigured }
+        return try await get(path: "/api/labels")
+    }
+
+    func setLabel(pattern: String, category: String, subcategory: String) async throws {
+        guard isConfigured else { return }
+        let body: [String: Any] = ["pattern": pattern, "category": category, "subcategory": subcategory]
+        try await post(path: "/api/labels", body: body) as Void
+    }
+
     // MARK: - Trigger Summarization
 
     func triggerSummarize(date: String, hour: Int) async throws {
         guard isConfigured else { return }
 
         let body: [String: Any] = ["date": date, "hour": hour]
-        let _: [String: Any] = try await post(path: "/api/summarize", body: body)
+        try await post(path: "/api/summarize", body: body) as Void
     }
 
     // MARK: - Networking Helpers

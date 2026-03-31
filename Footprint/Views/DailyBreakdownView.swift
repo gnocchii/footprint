@@ -1,10 +1,9 @@
 import SwiftUI
-import Charts
 
 struct DailyBreakdownView: View {
     @EnvironmentObject var appState: AppState
+    @Binding var selectedDate: Date
     @State private var appUsages: [ActivityRecord.AppUsage] = []
-    @State private var selectedDate = Date()
 
     var totalMinutes: Int {
         Int(appUsages.reduce(0) { $0 + $1.totalDuration } / 60)
@@ -12,18 +11,12 @@ struct DailyBreakdownView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            DatePicker("Date", selection: $selectedDate, displayedComponents: .date)
-                .datePickerStyle(.compact)
-                .labelsHidden()
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-
             if appUsages.isEmpty {
                 VStack(spacing: 8) {
-                    Image(systemName: "app.dashed")
-                        .font(.largeTitle)
+                    Image(systemName: "macbook")
+                        .font(.system(size: 32))
                         .foregroundStyle(.secondary)
-                    Text("No activity recorded yet")
+                    Text("No activity yet")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -31,30 +24,54 @@ struct DailyBreakdownView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        // Total time header — Screen Time style
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Total Screen Time")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text(formatDuration(totalMinutes))
+                                .font(.caption).foregroundStyle(.secondary)
+                            Text(fmtDur(totalMinutes))
                                 .font(.system(size: 28, weight: .bold))
                         }
                         .padding(.horizontal, 16)
 
-                        // Stacked horizontal bar — Screen Time style
-                        ScreenTimeBar(appUsages: Array(appUsages.prefix(8)), totalMinutes: totalMinutes)
-                            .frame(height: 28)
-                            .padding(.horizontal, 16)
+                        // Bar
+                        GeometryReader { geo in
+                            HStack(spacing: 1) {
+                                ForEach(appUsages.prefix(10), id: \.name) { usage in
+                                    let frac = totalMinutes > 0 ? (usage.totalDuration / 60) / Double(totalMinutes) : 0
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .fill(usage.category.color)
+                                        .frame(width: max(4, geo.size.width * frac))
+                                }
+                            }
+                        }
+                        .frame(height: 28)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .padding(.horizontal, 16)
 
-                        Divider()
-                            .padding(.horizontal, 16)
+                        Divider().padding(.horizontal, 16)
 
-                        // App list
                         VStack(spacing: 0) {
-                            ForEach(appUsages, id: \.appName) { usage in
-                                ScreenTimeAppRow(usage: usage, totalMinutes: totalMinutes)
-                                if usage.appName != appUsages.last?.appName {
-                                    Divider().padding(.leading, 52)
+                            ForEach(Array(appUsages.enumerated()), id: \.element.name) { i, usage in
+                                let mins = Int(usage.totalDuration / 60)
+                                HStack(spacing: 10) {
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .fill(usage.category.color)
+                                        .frame(width: 4, height: 30)
+                                    Image(systemName: iconForName(usage.name))
+                                        .font(.system(size: 14))
+                                        .foregroundStyle(.secondary)
+                                        .frame(width: 20)
+                                    Text(usage.name)
+                                        .font(.system(size: 13))
+                                    Spacer()
+                                    Text(fmtDur(mins))
+                                        .font(.system(size: 13, design: .monospaced))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 5)
+
+                                if i < appUsages.count - 1 {
+                                    Divider().padding(.leading, 50)
                                 }
                             }
                         }
@@ -68,121 +85,34 @@ struct DailyBreakdownView: View {
     }
 
     private func loadData() {
-        appUsages = (try? appState.databaseManager.dailyAppUsage(for: selectedDate)) ?? []
+        let records = (try? appState.databaseManager.dbPool.read { db in
+            try ActivityRecord.recordsForDay(db: db, date: selectedDate)
+        }) ?? []
+        appUsages = ActivityRecord.buildAppUsage(from: records)
     }
 
-    private func formatDuration(_ totalMinutes: Int) -> String {
-        if totalMinutes >= 60 {
-            return "\(totalMinutes / 60)h \(totalMinutes % 60)m"
-        }
-        return "\(totalMinutes)m"
-    }
-}
-
-// Screen Time-style stacked horizontal bar
-struct ScreenTimeBar: View {
-    let appUsages: [ActivityRecord.AppUsage]
-    let totalMinutes: Int
-
-    var body: some View {
-        GeometryReader { geo in
-            HStack(spacing: 1) {
-                ForEach(appUsages, id: \.appName) { usage in
-                    let minutes = usage.totalDuration / 60
-                    let fraction = totalMinutes > 0 ? minutes / Double(totalMinutes) : 0
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(colorForCategory(usage.category))
-                        .frame(width: max(4, geo.size.width * fraction))
-                }
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+    private func fmtDur(_ minutes: Int) -> String {
+        if minutes >= 60 { return "\(minutes / 60)h \(minutes % 60)m" }
+        return "\(minutes)m"
     }
 
-    private func colorForCategory(_ category: String?) -> Color {
-        guard let cat = category, let appCat = AppCategory(rawValue: cat) else {
-            return .blue
-        }
-        return appCat.color
-    }
-}
-
-struct ScreenTimeAppRow: View {
-    let usage: ActivityRecord.AppUsage
-    let totalMinutes: Int
-
-    var minutes: Int { Int(usage.totalDuration / 60) }
-    var percentage: Int {
-        guard totalMinutes > 0 else { return 0 }
-        return Int(Double(minutes) / Double(totalMinutes) * 100)
-    }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            // Color indicator dot
-            Circle()
-                .fill(colorForCategory(usage.category))
-                .frame(width: 10, height: 10)
-
-            Image(systemName: iconForApp(usage.appName))
-                .frame(width: 20, height: 20)
-                .foregroundStyle(.secondary)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(usage.appName)
-                    .font(.callout)
-                if let category = usage.category {
-                    Text(category)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Spacer()
-
-            VStack(alignment: .trailing, spacing: 1) {
-                Text(formatDuration(minutes))
-                    .font(.callout)
-                    .monospacedDigit()
-                Text("\(percentage)%")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 6)
-    }
-
-    private func colorForCategory(_ category: String?) -> Color {
-        guard let cat = category, let appCat = AppCategory(rawValue: cat) else {
-            return .blue
-        }
-        return appCat.color
-    }
-
-    private func formatDuration(_ totalMinutes: Int) -> String {
-        if totalMinutes >= 60 {
-            return "\(totalMinutes / 60)h \(totalMinutes % 60)m"
-        }
-        return "\(totalMinutes)m"
-    }
-
-    private func iconForApp(_ name: String) -> String {
+    private func iconForName(_ name: String) -> String {
         switch name.lowercased() {
-        case let n where n.contains("safari") || n.contains("chrome") || n.contains("firefox"):
-            return "globe"
-        case let n where n.contains("xcode"):
-            return "hammer"
-        case let n where n.contains("terminal"):
-            return "terminal"
-        case let n where n.contains("message") || n.contains("slack") || n.contains("discord"):
-            return "bubble.left"
-        case let n where n.contains("mail"):
-            return "envelope"
-        case let n where n.contains("music") || n.contains("spotify"):
-            return "music.note"
-        default:
-            return "app"
+        case let n where n.contains("xcode"): return "hammer.fill"
+        case let n where n.contains("terminal") || n.contains("iterm") || n.contains("kitty") || n.contains("warp"): return "terminal.fill"
+        case let n where n.contains("code") || n.contains("windsurf") || n.contains("cursor"): return "chevron.left.forwardslash.chevron.right"
+        case let n where n.contains("message"): return "message.fill"
+        case let n where n.contains("slack"): return "number.square.fill"
+        case let n where n.contains("discord"): return "bubble.left.and.bubble.right.fill"
+        case let n where n.contains("outlook") || n.contains("gmail") || n.contains("mail"): return "envelope.fill"
+        case let n where n.contains("music") || n.contains("spotify"): return "music.note"
+        case let n where n.contains("finder"): return "folder.fill"
+        case let n where n.contains("zoom") || n.contains("facetime"): return "video.fill"
+        case let n where n.contains("github"): return "chevron.left.forwardslash.chevron.right"
+        case let n where n.contains("youtube"): return "play.rectangle.fill"
+        case let n where n.contains("9anime") || n.contains("crunchyroll"): return "sparkles.tv"
+        case let n where n.contains("notion"): return "doc.text.fill"
+        default: return "globe"
         }
     }
 }
