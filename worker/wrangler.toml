@@ -6,7 +6,7 @@ compatibility_date = "2024-12-30"
 binding = "AI"
 
 [[d1_databases]]
-binding = "footprint_db"
+binding = "DB"
 database_name = "footprint-db"
 database_id = "79738138-2a85-493d-aac6-a4ceef24adcb"
 
