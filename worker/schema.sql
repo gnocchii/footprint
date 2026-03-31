@@ -22,8 +22,7 @@ CREATE TABLE IF NOT EXISTS hourly_summaries (
   date TEXT NOT NULL,
   hour INTEGER NOT NULL,
   summary TEXT DEFAULT '',
-  top_apps TEXT DEFAULT '[]',
-  categories TEXT DEFAULT '{}',
+  activities TEXT DEFAULT '[]',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -34,6 +33,15 @@ CREATE TABLE IF NOT EXISTS chat_history (
   message TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS user_labels (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  pattern TEXT NOT NULL UNIQUE,
+  category TEXT NOT NULL,
+  subcategory TEXT DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_activity_timestamp ON activity_records(timestamp);
 CREATE INDEX IF NOT EXISTS idx_screenshots_timestamp ON screenshots(timestamp);
 CREATE INDEX IF NOT EXISTS idx_summaries_date ON hourly_summaries(date);
+CREATE INDEX IF NOT EXISTS idx_user_labels_pattern ON user_labels(pattern);

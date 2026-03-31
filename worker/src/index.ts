@@ -3,6 +3,8 @@ import { handleScreenshotIngestion } from "./routes/screenshot";
 import { handleGetSummaries } from "./routes/summaries";
 import { handleGetStats } from "./routes/stats";
 import { handleChat } from "./routes/chat";
+import { handleGetHourlyActivities } from "./routes/hourly-activities";
+import { handleGetLabels, handleSetLabel } from "./routes/labels";
 import { runSummarizeWorkflow } from "./workflows/summarize";
 
 export interface Env {
@@ -69,6 +71,18 @@ export default {
 
         case path === "/api/chat" && request.method === "POST":
           response = await handleChat(request, env.DB, env.AI);
+          break;
+
+        case path === "/api/hourly-activities" && request.method === "GET":
+          response = await handleGetHourlyActivities(request, env.DB);
+          break;
+
+        case path === "/api/labels" && request.method === "GET":
+          response = await handleGetLabels(request, env.DB);
+          break;
+
+        case path === "/api/labels" && request.method === "POST":
+          response = await handleSetLabel(request, env.DB);
           break;
 
         case path === "/api/summarize" && request.method === "POST": {

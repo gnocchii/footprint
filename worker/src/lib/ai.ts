@@ -4,84 +4,82 @@ export interface AiBinding {
 
 const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
-export interface SummaryResult {
-  summary: string;
-  categories: Record<string, string>;
-  topApps: { app: string; minutes: number }[];
+// Structured activity produced by the AI per hour
+export interface AnalyzedActivity {
+  label: string;        // Clean human label like "Yuri on Ice"
+  category: string;     // Entertainment, Productivity, Social, Communication, Learning, Other
+  subcategory: string;  // Anime, YouTube, Coding, Email, Messaging, etc.
+  minutes: number;
 }
 
-export async function generateSummary(
+export interface HourAnalysis {
+  summary: string;
+  activities: AnalyzedActivity[];
+}
+
+export async function analyzeHour(
   ai: AiBinding,
-  activities: string,
-  ocrTexts: string
-): Promise<SummaryResult> {
-  const prompt = `Analyze this computer activity. Categorize EACH app into exactly one of: Productivity, Entertainment, Social, Learning, Communication, Utilities, Other.
+  activityText: string,
+  ocrText: string,
+  userLabels: { pattern: string; category: string; subcategory: string }[]
+): Promise<HourAnalysis> {
+  const labelContext = userLabels.length > 0
+    ? `\nThe user has provided these category preferences (ALWAYS respect these):\n${userLabels.map(l => `- "${l.pattern}" → ${l.category} / ${l.subcategory}`).join("\n")}\n`
+    : "";
 
-For browsers, look at the window title to determine the category. Examples:
-- "YouTube" or "9anime" or "Netflix" = Entertainment
-- "GitHub" or "Stack Overflow" or "Xcode" = Productivity
-- "Slack" or "Discord" or "Twitter" = Social
-- "Zoom" or "FaceTime" or "Messages" = Communication
-- "Khan Academy" or "Coursera" = Learning
+  const prompt = `Analyze this hour of computer activity. For each distinct activity, produce a clean label and categorize it.
 
-Be specific in the summary - mention actual content (video names, websites visited, who they were talking to if visible in window titles).
+Rules:
+- NEVER use app names like "Brave Browser" or "Safari" as labels. Use the actual content.
+- Group related items: multiple episodes of the same show → one entry with total time
+- Clean labels: "Yuri!!! On ICE - Episode 3 - 9anime" → "Yuri on Ice"
+- YouTube videos: summarize what they watched, don't just copy tab titles
+- Coding in Xcode/VS Code → label it by project name if visible
+- Slack/email → "Slack" or "Email" is fine as label
+- Anything under 1 minute total → skip it
+- Categories: Entertainment, Productivity, Social, Communication, Learning, Other
+- Subcategories: Anime, YouTube, Coding, Email, Messaging, Video Calls, School, Shopping, Browsing, etc.
+${labelContext}
+Activity data:
+${activityText}
 
-Activity records:
-${activities}
+${ocrText ? `Screen text (OCR):\n${ocrText}` : ""}
 
-${ocrTexts ? `Screen text (OCR):\n${ocrTexts}` : ""}
-
-Respond in this exact JSON format (no markdown, no code fences, just raw JSON):
-{"summary":"2-3 detailed sentences about what the user was doing, mentioning specific content","categories":{"AppName":"Category"},"topApps":[{"app":"AppName","minutes":25}]}`;
+Respond with this exact JSON (no markdown fences):
+{"summary":"1-2 sentence summary mentioning specific content","activities":[{"label":"Yuri on Ice","category":"Entertainment","subcategory":"Anime","minutes":35}]}`;
 
   try {
     const rawResult = await ai.run(MODEL, {
       messages: [
-        { role: "system", content: "You output valid JSON only. No markdown fences, no explanation, just the JSON object." },
+        { role: "system", content: "You output valid JSON only. No markdown fences, no explanation." },
         { role: "user", content: prompt },
       ],
-      max_tokens: 1024,
+      max_tokens: 2048,
     });
 
-    // Workers AI returns { response: <string|object> } — handle both
     const r = rawResult as any;
     let parsed: any;
-
     if (r?.response && typeof r.response === "object") {
-      // Already parsed object — use directly
       parsed = r.response;
     } else {
-      // String response — parse it
       let raw = typeof r?.response === "string" ? r.response : JSON.stringify(r);
-      console.log("AI raw string response:", raw.slice(0, 500));
-
-      // Handle markdown fences
       const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (fenceMatch) {
-        raw = fenceMatch[1].trim();
-      }
+      if (fenceMatch) raw = fenceMatch[1].trim();
       parsed = JSON.parse(raw);
     }
 
-    console.log("AI parsed result:", JSON.stringify(parsed).slice(0, 500));
     return {
-      summary: String(parsed.summary || "Activity recorded this hour."),
-      categories: parsed.categories && typeof parsed.categories === "object" ? parsed.categories : {},
-      topApps: Array.isArray(parsed.topApps) ? parsed.topApps : [],
+      summary: String(parsed.summary || ""),
+      activities: Array.isArray(parsed.activities) ? parsed.activities.map((a: any) => ({
+        label: String(a.label || ""),
+        category: String(a.category || "Other"),
+        subcategory: String(a.subcategory || ""),
+        minutes: Number(a.minutes) || 0,
+      })).filter((a: AnalyzedActivity) => a.minutes >= 1) : [],
     };
   } catch (err) {
-    console.error("AI summary generation failed:", err);
-    // Return a basic summary from the raw activity data
-    const appNames = [...new Set(activities.split("\n").map(line => {
-      const match = line.match(/- (.+?) \(/);
-      return match ? match[1] : null;
-    }).filter(Boolean))];
-
-    return {
-      summary: `Activity recorded with ${appNames.length} apps: ${appNames.slice(0, 3).join(", ")}.`,
-      categories: Object.fromEntries(appNames.map(app => [app, "Other"])),
-      topApps: [],
-    };
+    console.error("AI analysis failed:", err);
+    return { summary: "Activity recorded this hour.", activities: [] };
   }
 }
 
@@ -94,10 +92,7 @@ export async function chatWithContext(
   const messages = [
     {
       role: "system",
-      content: `You are Footprint, an AI assistant that knows everything about the user's computer activity. You help them understand how they spent their time. Be concise, specific, and reference actual apps and times from the data provided. If you don't have data for what they're asking, say so honestly.
-
-Here is the user's activity data:
-${activityContext}`,
+      content: `You are Footprint, an AI assistant that knows everything about the user's computer activity. Be concise, specific, reference actual apps and times.\n\nActivity data:\n${activityContext}`,
     },
     ...chatHistory.slice(-10).map((m) => ({
       role: m.role as "user" | "assistant",
@@ -107,14 +102,9 @@ ${activityContext}`,
   ];
 
   try {
-    const result = await ai.run(MODEL, {
-      messages,
-      max_tokens: 512,
-    }) as { response?: string };
-
+    const result = await ai.run(MODEL, { messages, max_tokens: 512 }) as any;
     return result?.response || "Sorry, I couldn't generate a response.";
-  } catch (err) {
-    console.error("Chat AI failed:", err);
-    return "Sorry, I'm having trouble connecting to the AI. Please try again.";
+  } catch {
+    return "Sorry, I'm having trouble connecting to the AI.";
   }
 }

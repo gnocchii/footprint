@@ -1,5 +1,5 @@
-import { getActivitiesForHour, getOcrForHour, saveSummary, markScreenshotsProcessed } from "../lib/db";
-import { generateSummary } from "../lib/ai";
+import { getActivitiesForHour, getOcrForHour } from "../lib/db";
+import { analyzeHour } from "../lib/ai";
 
 export interface SummarizeParams {
   date: string;
@@ -13,19 +13,44 @@ export async function runSummarizeWorkflow(
   const { date, hour } = params;
 
   try {
-    // Step 1: Collect activity data
+    // Check if already summarized
+    const existing = await env.DB
+      .prepare("SELECT id FROM hourly_summaries WHERE date = ? AND hour = ?")
+      .bind(date, hour).first();
+    if (existing) {
+      return { success: true, summary: "Already summarized." };
+    }
+
+    // Collect activity data
     const [activities, ocrResults] = await Promise.all([
       getActivitiesForHour(env.DB, date, hour),
       getOcrForHour(env.DB, date, hour),
     ]);
 
     if (activities.results.length === 0) {
-      return { success: true, summary: "No activity recorded this hour." };
+      return { success: true, summary: "No activity." };
     }
 
-    // Format activity data for the LLM
-    const activityText = activities.results
-      .map((a: any) => `${a.timestamp} - ${a.app_name} (${a.window_title}) - ${Math.round(a.duration / 60)}min`)
+    // AGGREGATE activities by app+window before sending to AI
+    const aggregated = new Map<string, { app: string; title: string; duration: number }>();
+    for (const a of activities.results as any[]) {
+      const key = `${a.app_name}|||${a.window_title}`;
+      const existing = aggregated.get(key);
+      if (existing) {
+        existing.duration += (a.duration || 0);
+      } else {
+        aggregated.set(key, { app: a.app_name, title: a.window_title || "", duration: a.duration || 0 });
+      }
+    }
+
+    // Filter and format — skip private tabs, loginwindow, and <30s
+    const activityText = [...aggregated.values()]
+      .filter(a => a.duration >= 30)
+      .filter(a => !a.title.toLowerCase().includes("private"))
+      .filter(a => !a.title.toLowerCase().includes("incognito"))
+      .filter(a => a.app !== "loginwindow")
+      .sort((a, b) => b.duration - a.duration)
+      .map(a => `${a.app} | "${a.title}" | ${Math.round(a.duration / 60)}min`)
       .join("\n");
 
     const ocrText = ocrResults.results
@@ -34,48 +59,26 @@ export async function runSummarizeWorkflow(
       .join("\n---\n")
       .substring(0, 3000);
 
-    console.log(`Summarizing ${date} hour ${hour}: ${activities.results.length} activities, ${ocrText.length} chars OCR`);
+    // Fetch user labels for personalized categorization
+    const labelsResult = await env.DB
+      .prepare("SELECT pattern, category, subcategory FROM user_labels")
+      .all();
+    const userLabels = labelsResult.results || [];
 
-    // Step 2: Analyze with Llama 3.3
-    const result = await generateSummary(env.AI, activityText, ocrText);
+    // Analyze with AI
+    const result = await analyzeHour(env.AI, activityText, ocrText, userLabels as any[]);
 
-    console.log("Summary result:", JSON.stringify(result));
+    console.log(`Analyzed ${date} h${hour}: ${result.activities.length} activities`);
 
-    // Step 3: Store results — ensure everything is a string for D1
-    const topAppsStr = typeof result.topApps === "string"
-      ? result.topApps
-      : JSON.stringify(result.topApps || []);
-
-    const categoriesStr = typeof result.categories === "string"
-      ? result.categories
-      : JSON.stringify(result.categories || {});
-
-    await saveSummary(
-      env.DB,
-      date,
-      hour,
-      String(result.summary),
-      topAppsStr,
-      categoriesStr
-    );
-
-    await markScreenshotsProcessed(env.DB, date, hour);
-
-    // Update activity categories
-    if (result.categories && typeof result.categories === "object") {
-      for (const [appName, category] of Object.entries(result.categories)) {
-        if (typeof category === "string") {
-          await env.DB
-            .prepare("UPDATE activity_records SET category = ? WHERE app_name = ? AND timestamp LIKE ?")
-            .bind(String(category), String(appName), `${date}%`)
-            .run();
-        }
-      }
-    }
+    // Store summary + structured activities
+    await env.DB
+      .prepare("INSERT INTO hourly_summaries (date, hour, summary, activities) VALUES (?, ?, ?, ?)")
+      .bind(date, hour, result.summary, JSON.stringify(result.activities))
+      .run();
 
     return { success: true, summary: result.summary };
   } catch (err: any) {
-    console.error("Summarize workflow error:", err);
+    console.error("Summarize error:", err);
     return { success: false, error: err.message || String(err) };
   }
 }
